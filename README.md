@@ -11,7 +11,3 @@ Supported features:
 - [ ] function call
 - [ ] local variables
 - [ ] eval
-
-- [ ] asd
-
-- [ ] asd
