@@ -2,9 +2,12 @@ package src;
 
 import java.util.Map;
 
+import static src.Interpreter.readline;
+
 public class Operations {
-    static public String[] Operations1 = {"thing", "print", "not", "erase", "isname", "run", "isnumber", "isbool"};
+    static public String[] Operations1 = {"thing", "print", "not", "erase", "isname", "run", "isnumber", "isbool", "isword", "isempty"};
     static public String[] Operations2 = {"make", "thing", "add", "sub", "mul", "div", "mod", "gt", "eq", "lt", "and", "or"};
+    static public String[] Operations3 = {"if"};
 
     public static String invoke(String operation, Map<String, String> variables, String var1, String var2) throws Exception {
         switch (operation) {
@@ -52,6 +55,10 @@ public class Operations {
                 return isname(variables, var1);
             case "isnumber" :
                 return isnumber(var1);
+            case "isword" :
+                return isword(var1);
+            case "isempty" :
+                return isempty(var1);
             case "run" :
                 return run(var1);
             case "not" :
@@ -86,9 +93,24 @@ public class Operations {
         return variables.containsKey(name) ? "true" : "false";
     }
 
+    static String isword(String name) {
+        String prefixes = "\"[(";
+        return prefixes.indexOf(name.charAt(0)) == -1 ? "true" : "false";
+    }
+
+    static String isempty(String name) {
+        String prefixes = "\"[(";
+        return prefixes.indexOf(name.charAt(0)) == -1 ? "true" : "false";
+    }
+
     static String run(String name) {
-        // TODO
-        return name;
+        String res = "";
+        try {
+            res = readline(name.substring(1, name.length() - 1));
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+        }
+        return res;
     }
 
     static String not(String name) throws Exception {

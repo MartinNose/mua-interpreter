@@ -25,88 +25,108 @@ public class Interpreter {
 
     static ArrayList<String> unaOps;
     static ArrayList<String> binOps;
+    static ArrayList<String> triOps;
     static Map<String, String> variables;
     static ArrayList<Operation> opStack;
     static ArrayList<String> valStack;
     static String buffer;
     static int balanceCnt;
     static int operandCnt;
-    static Scanner scanner;
+    public static Scanner scanner;
+    static State state;
 
     public static void mainLoop() throws Exception {
         scanner = new Scanner(System.in);
         unaOps = new ArrayList<>(Arrays.asList(Operations.Operations1));
         binOps = new ArrayList<>(Arrays.asList(Operations.Operations2));
+        triOps = new ArrayList<>(Arrays.asList(Operations.Operations3));
+
         variables = new HashMap<>();
 
-
-        State state = State.NORMAL;
+        state = State.NORMAL;
         opStack = new ArrayList<>();
         valStack = new ArrayList<>();
         operandCnt = 0;
 
         while (scanner.hasNext()) {
             String line = scanner.nextLine();
-            if (line.isEmpty()) {
-                break;
-            }
-            String[] literals = line.split("\\s+");
-            for (String literal : literals) {
-                switch (state) {
-                    case NORMAL:
-                        state = handleLiteral(literal);
-                        while (!opStack.isEmpty()
-                                && opStack.get(opStack.size() - 1).operandCnt == 0) {
-                            pushVStack(popStack());
-                        }
-                        break;
-                    case LISBEG:
-                        // READ the list and store as "[a,b,[c,d],e]"
-                        updateBCnt(literal, '[');
-                        if (balanceCnt == 0) {
-                            buffer += literal;
-                            pushVStack(buffer);
-                            state = State.NORMAL;
-                        }
-                        break;
-                    case INFIXBEG:
-                        if (literal.charAt(0) == '(') {
-                            int tmp = balanceCnt;
-                            balanceCnt = 0;
-                            updateBCnt(literal, '(');
-                            if (balanceCnt == 0) {
-                                buffer += eval(literal);
-                                balanceCnt = tmp;
-                                break;
-                            }
-                            balanceCnt = tmp;
-
-                            if (binOps.contains(literal.substring(1)) || unaOps.contains(literal.substring(1))) {
-                                opStack.add(new Operation(literal.substring(1)));
-                                break;
-                            }
-                        }
-
-                        updateBCnt(literal, '(');
-                        if (balanceCnt == 0) {
-                            buffer += literal;
-                            pushVStack(eval(buffer));
-                            state = State.NORMAL;
-                        }
-                        break;
-                    default:
-                        break;
-                }
+            try {
+                readline(line);
+            } catch (Exception e) {
+                System.err.println(e.getMessage());
             }
         }
 
         scanner.close();
     }
 
+    public static String readline(String line) throws Exception {
+        if (line.isEmpty()) {
+            return "";
+        }
+        String[] literals = line.split("\\s+");
+        String tmp = "";
+        for (String literal : literals) {
+            switch (state) {
+                case NORMAL:
+                    state = handleLiteral(literal);
+                    break;
+                case LISBEG:
+                    // READ the list and store as "[a,b,[c,d],e]"
+                    updateBCnt(literal, '[');
+                    if (balanceCnt == 0) {
+                        buffer += " " + literal;
+                        pushVStack(buffer);
+                        state = State.NORMAL;
+                    } else {
+                        buffer += " " + literal;
+                    }
+                    break;
+                case INFIXBEG:
+//                        if (literal.charAt(0) == '(') {
+//                            int tmp = balanceCnt;
+//                            balanceCnt = 0;
+//                            updateBCnt(literal, '(');
+//                            if (balanceCnt == 0) {
+//                                buffer += eval(literal);
+//                                balanceCnt = tmp;
+//                                break;
+//                            }
+//                            balanceCnt = tmp;
+//
+//                            if (isOp(literal.substring(1))) {
+//                                opStack.add(new Operation(literal.substring(1)));
+//                                break;
+//                            }
+//                        }
+                    updateBCnt(literal, '(');
+                    if (balanceCnt == 0) {
+                        buffer += " " + literal;
+                        pushVStack(eval(buffer));
+                        state = State.NORMAL;
+                    } else {
+                        buffer += " " + literal;
+                    }
+                    break;
+                case RUN:
+                default:
+                    break;
+            }
+
+            while (!opStack.isEmpty()
+                    && opStack.get(opStack.size() - 1).operandCnt == 0) {
+                tmp = popStack();
+                pushVStack(tmp);
+            }
+        }
+        return tmp;
+    }
+
     enum State {
         NORMAL,
         LISBEG,
-        INFIXBEG
+        INFIXBEG,
+        RUN
     }
 
     static void pushVStack(String value) {
@@ -118,10 +138,15 @@ public class Interpreter {
 
     static private final Pattern numeric = Pattern.compile("-?\\d+(\\.\\d+)?");
 
+    public static boolean isOp(String name) {
+        return name.equals("read") || unaOps.contains(name) || binOps.contains(name) || triOps.contains(name);
+    }
+
     private static int getOperandReq(String op) throws Exception {
         if (op.equals("read")) return 0;
         else if (unaOps.contains(op)) return 1;
         else if (binOps.contains(op)) return 2;
+        else if (triOps.contains(op)) return 3;
         else throw new Exception("Invalid Operation: " + op);
     }
 
@@ -141,7 +166,7 @@ public class Interpreter {
     }
 
     private static State handleLiteral(String literal) throws Exception {
-        if (unaOps.contains(literal) || binOps.contains(literal)) {
+        if (isOp(literal)) {
             opStack.add(new Operation(literal, getOperandReq(literal)));
             return State.NORMAL;
         } else if (literal.charAt(0) == '[') {
@@ -155,13 +180,7 @@ public class Interpreter {
                 return State.NORMAL;
             }
         } else if (literal.charAt(0) == '(') {
-            if (unaOps.contains(literal.substring(1)) || binOps.contains(literal.substring(1))) {
-                opStack.add(new Operation(literal.substring(1)));
-                buffer = "(";
-            } else {
-                buffer = literal;
-            }
-
+            buffer = literal;
             balanceCnt = 0;
             updateBCnt(buffer, '(');
             if (balanceCnt != 0) {
@@ -183,7 +202,6 @@ public class Interpreter {
         } else {
             throw new Exception("Invalid literal " + literal);
         }
-
         return State.NORMAL;
     }
 
@@ -197,6 +215,16 @@ public class Interpreter {
             res = eval(op, valStack.remove(valStack.size() - 1));
         } else if (binOps.contains(op)) {
             res = eval(op, valStack.remove(valStack.size() - 2), valStack.remove(valStack.size() - 1));
+        } else if (triOps.contains(op)) {
+            String flag = valStack.remove(valStack.size() - 3);
+            if (flag.equals("true")) {
+                res = eval("run", valStack.remove(valStack.size() - 2));
+            } else if (flag.equals("false")) {
+                res = eval("run", valStack.remove(valStack.size() - 1));
+            } else {
+                throw new Exception("if not accepting legal operands. flag = " + flag );
+            }
+            valStack.remove(valStack.size() - 1);
         } else {
             throw new Exception("Invalid operator" + op);
         }
@@ -213,36 +241,29 @@ public class Interpreter {
     }
 
     private static String eval(String expression) throws Exception {
-        // READ the infix expression and process
-        // read operands in stack
-        // push operator to stack
-        // if the operator is of less priority than opstack.last() then
-        // eval the current stack and push the result into the stack and push the new operator in
-        // if there is a left parenthesis then push it to the stack and continue til there is a right parenthesis
-        // if there is a right parenthsis and no left parenthesis in the stack then push the result into valStack
-        // if there is a prefix op then its of highest priority
         ArrayList<String> operands = new ArrayList<>();
-        ArrayList<Character> operator = new ArrayList<>();
+        ArrayList<String> operators = new ArrayList<>();
         String op0 = "()";
         String op3 = ":";
         String op2 = "*/%";
         String op1 = "+-";
         String op = op0 + op1 + op2 + op3;
-        Map<Character, Integer> priority = new HashMap<>();
-        priority.put('+', 1);
-        priority.put('-', 1);
-        priority.put('*', 2);
-        priority.put('/', 2);
-        priority.put('%', 2);
-        priority.put(':', 3);
-        priority.put('(', 0);
-        priority.put(')', 0);
+        Map<String, Integer> priority = new HashMap<>();
+        priority.put("+", 1);
+        priority.put("-", 1);
+        priority.put("*", 2);
+        priority.put("/", 2);
+        priority.put("%", 2);
+        priority.put(":", 3);
+        priority.put("(", 0);
+        priority.put(")", 0);
+        priority.put("add", 1);
 
         String state = "init";
         double operand;
         for (int i = 0; i < expression.length(); i++) {
             char cur = expression.charAt(i);
-            if (cur == '-' && (!state.equals("op") || (i > 0 && expression.charAt(i - 1) == '(')) || cur >= '0' && cur <= '9') {
+            if (cur == '-' && (state.equals("op") || (i > 0 && expression.charAt(i - 1) == '(')) || cur >= '0' && cur <= '9') {
                 if (cur != '-') operand = cur - '0';
                 else {
                     i++;
@@ -256,11 +277,17 @@ public class Interpreter {
                     i++;
                 }
                 operands.add(Double.toString(operand));
+                state = "num";
             } else if (op.contains(String.valueOf(cur))) {
-                if (cur == '(' || operator.isEmpty() || priority.get(cur) >= priority.get(operator.get(operator.size() - 1))) {
-                    operator.add(cur);
+                if (cur == '(' || operators.isEmpty() || priority.get(String.valueOf(cur)) >= priority.get(operators.get(operators.size() - 1))) {
+                    operators.add(String.valueOf(cur));
                 } else {
-                    cleanStack(operands, operator);
+                    cleanStack(operands, operators);
+                    if (cur == ')' && operators.get(operators.size() - 1).equals("(")) {
+                        operators.remove(operators.size() - 1);
+                    } else {
+                        operators.add(String.valueOf(cur));
+                    }
                 }
                 state = "op";
             } else if (Character.isLetter(cur)) {
@@ -269,22 +296,27 @@ public class Interpreter {
                     name.append(expression.charAt(i + 1));
                     i++;
                 }
-                operands.add(name.toString());
+                String literal = name.toString();
+                if (binOps.contains(literal) || unaOps.contains(literal)) {
+                    operators.add(literal);
+                } else {
+                    operands.add(name.toString());
+                }
             }
         }
         return operands.get(0);
     }
 
-    private static void cleanStack(ArrayList<String> operands, ArrayList<Character> operators) throws Exception {
-        while (!operators.isEmpty() && operators.get(operators.size() - 1) != '(') {
-            char Op = operators.remove(operators.size() - 1);
+    private static void cleanStack(ArrayList<String> operands, ArrayList<String> operators) throws Exception {
+        while (!operators.isEmpty() && !operators.get(operators.size() - 1).equals("(")) {
+            String Op = operators.remove(operators.size() - 1);
             double res = switch (Op) {
-                case '+' -> Double.parseDouble(operands.remove(operands.size() - 1)) + Double.parseDouble(operands.remove(operands.size() - 1));
-                case '-' -> Double.parseDouble(operands.remove(operands.size() - 1)) - Double.parseDouble(operands.remove(operands.size() - 1));
-                case '*' -> Double.parseDouble(operands.remove(operands.size() - 1)) * Double.parseDouble(operands.remove(operands.size() - 1));
-                case '/' -> Double.parseDouble(operands.remove(operands.size() - 1)) / Double.parseDouble(operands.remove(operands.size() - 1));
-                case '%' -> Double.parseDouble(operands.remove(operands.size() - 1)) % Double.parseDouble(operands.remove(operands.size() - 1));
-                case ':' -> Double.parseDouble(variables.get(operands.remove(operands.size() - 1)));
+                case "+", "add" -> Double.parseDouble(operands.remove(operands.size() - 2)) + Double.parseDouble(operands.remove(operands.size() - 1));
+                case "-" -> Double.parseDouble(operands.remove(operands.size() - 2)) - Double.parseDouble(operands.remove(operands.size() - 1));
+                case "*" -> Double.parseDouble(operands.remove(operands.size() - 2)) * Double.parseDouble(operands.remove(operands.size() - 1));
+                case "/" -> Double.parseDouble(operands.remove(operands.size() - 2)) / Double.parseDouble(operands.remove(operands.size() - 1));
+                case "%" -> Double.parseDouble(operands.remove(operands.size() - 2)) % Double.parseDouble(operands.remove(operands.size() - 1));
+                case ":" -> Double.parseDouble(variables.get(operands.remove(operands.size() - 1)));
                 default -> throw new Exception("Invalid Operator");
             };
             operands.add(Double.toString(res));
