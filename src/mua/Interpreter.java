@@ -1,4 +1,4 @@
-package src;
+package mua;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,6 +34,7 @@ public class Interpreter {
     static int operandCnt;
     public static Scanner scanner;
     static State state;
+    static ArrayList<Map<String, String>> localStack;
 
     public static void mainLoop() throws Exception {
         scanner = new Scanner(System.in);
@@ -42,6 +43,7 @@ public class Interpreter {
         triOps = new ArrayList<>(Arrays.asList(Operations.Operations3));
 
         variables = new HashMap<>();
+        localStack = new ArrayList<>();
 
         state = State.NORMAL;
         opStack = new ArrayList<>();
@@ -53,7 +55,7 @@ public class Interpreter {
             try {
                 readline(line);
             } catch (Exception e) {
-                System.err.println(e.getMessage());
+                System.out.println(e.getMessage());
             }
         }
 
@@ -77,6 +79,7 @@ public class Interpreter {
                     if (balanceCnt == 0) {
                         buffer += " " + literal;
                         pushVStack(buffer);
+                        System.out.println("*"+buffer+"*");
                         state = State.NORMAL;
                     } else {
                         buffer += " " + literal;
@@ -164,10 +167,26 @@ public class Interpreter {
             }
         }
     }
-
+    private static String getBody(String op) {
+        String body = variables.get(op);
+        body = body.substring(1, body.length() - 1);
+        System.out.println(body.split("[\\[\\]]", 3)[2].strip());
+        return body.split("[\\[\\]]", 3)[2].strip(); // TODO to be checked
+    }
+    private static String[] getArgs(String op) {
+        String[] res = variables.get(op).split("[\\[\\]]")[2].split(" ");
+        for (int i = 0; i < res.length; i++) {
+            System.out.println(res[i]);
+        }
+        return res;
+    }
     private static State handleLiteral(String literal) throws Exception {
         if (isOp(literal)) {
             opStack.add(new Operation(literal, getOperandReq(literal)));
+            return State.NORMAL;
+        } else if (variables.containsKey(literal) && variables.get(literal).charAt(0) == '[') {
+            System.out.println(literal + " is added to opStack, argCnt = " + getArgs(variables.get(literal)).length);
+            opStack.add(new Operation(literal, getArgs(variables.get(literal)).length));
             return State.NORMAL;
         } else if (literal.charAt(0) == '[') {
             buffer = literal;
@@ -190,8 +209,14 @@ public class Interpreter {
                 return State.NORMAL;
             }
         } else if (literal.charAt(0) == ':') { // thing a name
-            String value = variables.get(literal.substring(1));
-            if (value.isEmpty()) throw new Exception("Undefined variable: " + literal.substring(1));
+            String value;
+            if (localStack.isEmpty()) {
+                value = variables.get(literal.substring(1));
+            } else {
+                value = localStack.get(localStack.size() - 1).get(literal.substring(1));
+                if (value.equals(null)) value = variables.get(literal.substring(1));
+            }
+            if (value.equals(null)) throw new Exception("Undefined variable: " + literal.substring(1));
             pushVStack(value);
         } else if (literal.charAt(0) == '"') { // word
             pushVStack(literal.substring(1));
@@ -225,6 +250,16 @@ public class Interpreter {
                 throw new Exception("if not accepting legal operands. flag = " + flag );
             }
             valStack.remove(valStack.size() - 1);
+        } else if (variables.containsKey(op)) {
+            System.out.println(op + "is called");
+            Map<String, String> args = new HashMap<>();
+            String[] argList = getArgs(op);
+            for (int i = argList.length - 1; i >= 0; i--) {
+                args.put(argList[i], valStack.remove(valStack.size() - 1));
+            }
+            localStack.add(args);
+            res = eval("run", getBody(op));
+            localStack.remove(localStack.size() - 1);
         } else {
             throw new Exception("Invalid operator" + op);
         }
@@ -244,10 +279,10 @@ public class Interpreter {
         ArrayList<String> operands = new ArrayList<>();
         ArrayList<String> operators = new ArrayList<>();
         String op0 = "()";
-        String op3 = ":";
+        //String op3 = ":";
         String op2 = "*/%";
         String op1 = "+-";
-        String op = op0 + op1 + op2 + op3;
+        String op = op0 + op1 + op2 ;
         Map<String, Integer> priority = new HashMap<>();
         priority.put("+", 1);
         priority.put("-", 1);
@@ -290,6 +325,16 @@ public class Interpreter {
                     }
                 }
                 state = "op";
+
+            } else if (cur == ':') {
+                i = i + 1;
+                StringBuilder name = new StringBuilder(String.valueOf(expression.charAt(i)));
+                while (i + 1 < expression.length() && Character.isLetterOrDigit(expression.charAt(i + 1) )) {
+                    name.append(expression.charAt(i + 1));
+                    i++;
+                }
+                operands.add(variables.get(name.toString()));
+                state = "num";
             } else if (Character.isLetter(cur)) {
                 StringBuilder name = new StringBuilder(String.valueOf(cur));
                 while (i + 1 < expression.length() && Character.isLetterOrDigit(expression.charAt(i + 1) )) {
@@ -302,6 +347,7 @@ public class Interpreter {
                 } else {
                     operands.add(name.toString());
                 }
+                state = "num";
             }
         }
         return operands.get(0);
@@ -310,15 +356,30 @@ public class Interpreter {
     private static void cleanStack(ArrayList<String> operands, ArrayList<String> operators) throws Exception {
         while (!operators.isEmpty() && !operators.get(operators.size() - 1).equals("(")) {
             String Op = operators.remove(operators.size() - 1);
-            double res = switch (Op) {
-                case "+", "add" -> Double.parseDouble(operands.remove(operands.size() - 2)) + Double.parseDouble(operands.remove(operands.size() - 1));
-                case "-" -> Double.parseDouble(operands.remove(operands.size() - 2)) - Double.parseDouble(operands.remove(operands.size() - 1));
-                case "*" -> Double.parseDouble(operands.remove(operands.size() - 2)) * Double.parseDouble(operands.remove(operands.size() - 1));
-                case "/" -> Double.parseDouble(operands.remove(operands.size() - 2)) / Double.parseDouble(operands.remove(operands.size() - 1));
-                case "%" -> Double.parseDouble(operands.remove(operands.size() - 2)) % Double.parseDouble(operands.remove(operands.size() - 1));
-                case ":" -> Double.parseDouble(variables.get(operands.remove(operands.size() - 1)));
-                default -> throw new Exception("Invalid Operator");
-            };
+            double res;
+            switch (Op) {
+                case "+":
+                case "add":
+                    res = Double.parseDouble(operands.remove(operands.size() - 2)) + Double.parseDouble(operands.remove(operands.size() - 1));
+                    break;
+                case "-":
+                    res = Double.parseDouble(operands.remove(operands.size() - 2)) - Double.parseDouble(operands.remove(operands.size() - 1));
+                    break;
+                case "*":
+                    res = Double.parseDouble(operands.remove(operands.size() - 2)) * Double.parseDouble(operands.remove(operands.size() - 1));
+                    break;
+                case "/":
+                    res = Double.parseDouble(operands.remove(operands.size() - 2)) / Double.parseDouble(operands.remove(operands.size() - 1));
+                    break;
+                case "%":
+                    res = Double.parseDouble(operands.remove(operands.size() - 2)) % Double.parseDouble(operands.remove(operands.size() - 1));
+                    break;
+                case ":":
+                    res = Double.parseDouble(variables.get(operands.remove(operands.size() - 1)));
+                    break;
+                default:
+                    throw new Exception("Invalid Operator");
+            }
             operands.add(Double.toString(res));
         }
     }

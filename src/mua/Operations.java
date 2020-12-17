@@ -1,46 +1,46 @@
-package src;
+package mua;
 
 import java.util.Map;
 
-import static src.Interpreter.readline;
+import static mua.Interpreter.readline;
 
 public class Operations {
-    static public String[] Operations1 = {"thing", "print", "not", "erase", "isname", "run", "isnumber", "isbool", "isword", "isempty"};
+    static public String[] Operations1 = {"thing", "print", "not", "erase", "isname", "run", "isnumber", "isbool", "isword", "isempty", "islist"};
     static public String[] Operations2 = {"make", "thing", "add", "sub", "mul", "div", "mod", "gt", "eq", "lt", "and", "or"};
     static public String[] Operations3 = {"if"};
 
     public static String invoke(String operation, Map<String, String> variables, String var1, String var2) throws Exception {
         switch (operation) {
-        case "make" :
-            return make(variables, var1, var2);
-        case "thing" :
-            return thing(variables, var1);
-        case "print" :
-            return print(var1);
-        case "add" :
-            return add(var1, var2);
-        case "sub" :
-            return sub(var1, var2);
-        case "mul" :
-            return mul(var1, var2);
-        case "div" :
-            return div(var1, var2);
-        case "mod" :
-            return mod(var1, var2);
-        case "eq" :
-            return eq(var1, var2);
-        case "gt" :
-            return gt(var1, var2);
-        case "lt" :
-            return lt(var1, var2);
-        case "and" :
-            return and(var1, var2);
-        case "or" :
-            return or(var1, var2);
-        default :
-            System.err.println("Invalid Operation");
-            return null;
-    }
+            case "make" :
+                return make(variables, var1, var2);
+            case "thing" :
+                return thing(variables, var1);
+            case "print" :
+                return print(var1);
+            case "add" :
+                return add(var1, var2);
+            case "sub" :
+                return sub(var1, var2);
+            case "mul" :
+                return mul(var1, var2);
+            case "div" :
+                return div(var1, var2);
+            case "mod" :
+                return mod(var1, var2);
+            case "eq" :
+                return eq(var1, var2);
+            case "gt" :
+                return gt(var1, var2);
+            case "lt" :
+                return lt(var1, var2);
+            case "and" :
+                return and(var1, var2);
+            case "or" :
+                return or(var1, var2);
+            default :
+                System.err.println("Invalid Operation");
+                return null;
+        }
     }
 
     public static String invoke(String operation, Map<String, String> variables, String var1) throws Exception {
@@ -59,6 +59,8 @@ public class Operations {
                 return isword(var1);
             case "isempty" :
                 return isempty(var1);
+            case "islist" :
+                return islist(var1);
             case "run" :
                 return run(var1);
             case "not" :
@@ -70,7 +72,13 @@ public class Operations {
                 return null;
         }
     }
-    
+
+    public static String invoke(String operation, Map<String, String> variables, Map<String, String> localV) throws Exception {
+        if (!variables.containsKey(operation)) throw new Exception("Function not found");
+        
+        return "1";
+    }
+
     static String make(Map<String, String> variables, String name, String value) {
         variables.put(name, value);
         return value;
@@ -95,12 +103,16 @@ public class Operations {
 
     static String isword(String name) {
         String prefixes = "\"[(";
+        if (isNumeric(name)) return "false";
         return prefixes.indexOf(name.charAt(0)) == -1 ? "true" : "false";
     }
 
     static String isempty(String name) {
-        String prefixes = "\"[(";
-        return prefixes.indexOf(name.charAt(0)) == -1 ? "true" : "false";
+        return  (name.matches("\\[\\s*\\]") || name.equals("")) ? "true" : "false";
+    }
+
+    static String islist(String name) {
+        return  (name.matches("\\[.*\\]") || name.equals("")) ? "true" : "false";
     }
 
     static String run(String name) {
@@ -144,7 +156,7 @@ public class Operations {
         return Float.toString(res);
     }
 
-    static String eq(String var1, String var2) { 
+    static String eq(String var1, String var2) {
         return (var1.equals(var2))? "true" : "false";
     }
 

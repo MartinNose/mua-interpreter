@@ -1,4 +1,4 @@
-package src;
+package mua;
 
 public class Main {
     public static void main(String[] args) {
@@ -6,8 +6,7 @@ public class Main {
         try {
             Interpreter.mainLoop();
         } catch (Exception e) {
-            System.err.println(e.getMessage());
+            System.out.println(e.getMessage());
         }
-
     }
 }
