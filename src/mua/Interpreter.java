@@ -35,6 +35,7 @@ public class Interpreter {
     public static Scanner scanner;
     static State state;
     static ArrayList<Map<String, String>> localStack;
+    static boolean isReturning = false;
 
     public static void mainLoop() throws Exception {
         scanner = new Scanner(System.in);
@@ -63,12 +64,13 @@ public class Interpreter {
     }
 
     public static String readline(String line) throws Exception {
-        if (line.isEmpty()) {
+        if (line.isEmpty() || line.equals("")) {
             return "";
         }
         String[] literals = line.split("\\s+");
         String tmp = "";
         for (String literal : literals) {
+            if (literal.equals("")) continue;
             switch (state) {
                 case NORMAL:
                     state = handleLiteral(literal);
@@ -79,29 +81,12 @@ public class Interpreter {
                     if (balanceCnt == 0) {
                         buffer += " " + literal;
                         pushVStack(buffer);
-                        System.out.println("*"+buffer+"*");
                         state = State.NORMAL;
                     } else {
                         buffer += " " + literal;
                     }
                     break;
                 case INFIXBEG:
-//                        if (literal.charAt(0) == '(') {
-//                            int tmp = balanceCnt;
-//                            balanceCnt = 0;
-//                            updateBCnt(literal, '(');
-//                            if (balanceCnt == 0) {
-//                                buffer += eval(literal);
-//                                balanceCnt = tmp;
-//                                break;
-//                            }
-//                            balanceCnt = tmp;
-//
-//                            if (isOp(literal.substring(1))) {
-//                                opStack.add(new Operation(literal.substring(1)));
-//                                break;
-//                            }
-//                        }
                     updateBCnt(literal, '(');
                     if (balanceCnt == 0) {
                         buffer += " " + literal;
@@ -116,10 +101,26 @@ public class Interpreter {
                     break;
             }
 
-            while (!opStack.isEmpty()
-                    && opStack.get(opStack.size() - 1).operandCnt == 0) {
+            while (!opStack.isEmpty()) {
+                Operation top = opStack.get(opStack.size() - 1);
+                if (top.op.equals("__FENCE__") || top.operandCnt != 0) break;
+                if (top.op.equals("return")) {
+                    tmp = popStack();
+                    isReturning = true;
+                    while (!opStack.isEmpty() && !opStack.get(opStack.size() - 1).op.equals("__FENCE__")) {
+                        opStack.remove(opStack.size() - 1);
+                    }
+                    while (!valStack.isEmpty() && !valStack.get(valStack.size() - 1).equals("__FENCE__")) {
+                        valStack.remove(valStack.size() - 1);
+                    }
+                    return tmp;
+                }
                 tmp = popStack();
+                if (isReturning) {
+                    return tmp;
+                };
                 pushVStack(tmp);
+
             }
         }
         return tmp;
@@ -133,10 +134,72 @@ public class Interpreter {
     }
 
     static void pushVStack(String value) {
-        if (!opStack.isEmpty()) {
+        if (!opStack.isEmpty() && !opStack.get(opStack.size() - 1).op.equals("__FENCE__")) {
             valStack.add(value);
             opStack.get(opStack.size() - 1).operandCnt--;
         }
+    }
+
+    private static String popStack() throws Exception {
+        String op = opStack.get(opStack.size() - 1).op;
+
+        String res;
+        if (op.equals("read")) {
+            res = scanner.nextLine();
+        } else if (unaOps.contains(op)) {
+            res = eval(op, valStack.remove(valStack.size() - 1));
+        } else if (binOps.contains(op)) {
+            res = eval(op, valStack.remove(valStack.size() - 2), valStack.remove(valStack.size() - 1));
+        } else if (triOps.contains(op)) {
+            String flag = valStack.remove(valStack.size() - 3);
+            if (flag.equals("true")) {
+                valStack.remove(valStack.size() - 1);
+                res = eval("run", valStack.remove(valStack.size() - 1));
+            } else if (flag.equals("false")) {
+                valStack.remove(valStack.size() - 2);
+                res = eval("run", valStack.remove(valStack.size() - 1));
+            } else {
+                throw new Exception("if not accepting legal operands. flag = " + flag);
+            }
+        } else if (!localStack.isEmpty() && localStack.get(localStack.size() - 1).containsKey(op)) {
+            res = callSubProgram(op, valStack);
+        } else if (variables.containsKey(op)) {
+            res = callSubProgram(op, valStack);
+        } else if (op.equals("__FENCE__")) {
+            throw new Exception("Popping fence!");
+        } else {
+            throw new Exception("Invalid operator" + op);
+        }
+        if (!isReturning) opStack.remove(opStack.size() - 1);
+        return res;
+    }
+
+    static String callSubProgram (String op, ArrayList<String> vals) throws Exception {
+        Map<String, String> args = new HashMap<>();
+        String[] argList = getArgs(op);
+        for (int i = argList.length - 1; i >= 0; i--) {
+            args.put(argList[i], vals.remove(vals.size() - 1));
+        }
+        boolean lastReturnStatus = isReturning;
+        State lastState = state;
+        state = State.NORMAL;
+        valStack.add("__FENCE__");
+        opStack.add(new Operation("__FENCE__", -1));
+        String body = getBody(op);
+        localStack.add(args);
+        String res = eval("run", body);
+        localStack.remove(localStack.size() - 1);
+        isReturning = lastReturnStatus;
+        state = lastState;
+//        while (!opStack.isEmpty() && !opStack.get(opStack.size() - 1).op.equals("__FENCE__")) {
+//            opStack.remove(opStack.size() - 1);
+//        }
+//        while (!valStack.isEmpty() && !valStack.get(valStack.size() - 1).equals("__FENCE__")) {
+//            valStack.remove(valStack.size() - 1);
+//        }
+        opStack.remove(opStack.size() - 1);
+        valStack.remove(valStack.size() - 1);
+        return res;
     }
 
     static private final Pattern numeric = Pattern.compile("-?\\d+(\\.\\d+)?");
@@ -168,15 +231,25 @@ public class Interpreter {
         }
     }
     private static String getBody(String op) {
-        String body = variables.get(op);
+        String body;
+        if (!localStack.isEmpty() && localStack.get(localStack.size() - 1).containsKey(op)) {
+            body = localStack.get(localStack.size() - 1).get(op);
+        } else {
+            body = variables.get(op);
+        }
         body = body.substring(1, body.length() - 1);
-        System.out.println(body.split("[\\[\\]]", 3)[2].strip());
-        return body.split("[\\[\\]]", 3)[2].strip(); // TODO to be checked
+        // System.out.println(body.split("[\\[\\]]", 3)[2].strip());
+        return body.split("[\\[\\]]", 3)[2].replaceAll("(^ )|( $)", ""); // TODO to be checked
     }
     private static String[] getArgs(String op) {
-        String[] res = variables.get(op).split("[\\[\\]]")[2].split(" ");
-        for (int i = 0; i < res.length; i++) {
-            System.out.println(res[i]);
+        String[] res;
+        if (!localStack.isEmpty() && localStack.get(localStack.size() - 1).containsKey(op)) {
+            res = localStack.get(localStack.size() - 1).get(op).split("[\\[\\]]")[2].split(" ");
+        } else {
+            res = variables.get(op).split("[\\[\\]]")[2].split(" ");
+        }
+        if (res[0].equals("")) {
+            return new String[0];
         }
         return res;
     }
@@ -185,9 +258,10 @@ public class Interpreter {
             opStack.add(new Operation(literal, getOperandReq(literal)));
             return State.NORMAL;
         } else if (variables.containsKey(literal) && variables.get(literal).charAt(0) == '[') {
-            System.out.println(literal + " is added to opStack, argCnt = " + getArgs(variables.get(literal)).length);
-            opStack.add(new Operation(literal, getArgs(variables.get(literal)).length));
+            opStack.add(new Operation(literal, getArgs(literal).length));
             return State.NORMAL;
+        } else if (!localStack.isEmpty() && localStack.get(localStack.size() - 1).containsKey(literal) && localStack.get(localStack.size() - 1).get(literal).charAt(0) == '[') {
+            opStack.add(new Operation(literal, getArgs(literal).length));
         } else if (literal.charAt(0) == '[') {
             buffer = literal;
             balanceCnt = 0;
@@ -230,42 +304,7 @@ public class Interpreter {
         return State.NORMAL;
     }
 
-    private static String popStack() throws Exception {
-        String op = opStack.get(opStack.size() - 1).op;
-        opStack.remove(opStack.size() - 1);
-        String res;
-        if (op.equals("read")) {
-            res = scanner.nextLine();
-        } else if (unaOps.contains(op)) {
-            res = eval(op, valStack.remove(valStack.size() - 1));
-        } else if (binOps.contains(op)) {
-            res = eval(op, valStack.remove(valStack.size() - 2), valStack.remove(valStack.size() - 1));
-        } else if (triOps.contains(op)) {
-            String flag = valStack.remove(valStack.size() - 3);
-            if (flag.equals("true")) {
-                res = eval("run", valStack.remove(valStack.size() - 2));
-            } else if (flag.equals("false")) {
-                res = eval("run", valStack.remove(valStack.size() - 1));
-            } else {
-                throw new Exception("if not accepting legal operands. flag = " + flag );
-            }
-            valStack.remove(valStack.size() - 1);
-        } else if (variables.containsKey(op)) {
-            System.out.println(op + "is called");
-            Map<String, String> args = new HashMap<>();
-            String[] argList = getArgs(op);
-            for (int i = argList.length - 1; i >= 0; i--) {
-                args.put(argList[i], valStack.remove(valStack.size() - 1));
-            }
-            localStack.add(args);
-            res = eval("run", getBody(op));
-            localStack.remove(localStack.size() - 1);
-        } else {
-            throw new Exception("Invalid operator" + op);
-        }
 
-        return res;
-    }
 
     private static String eval(String op, String var1) throws Exception {
         return Operations.invoke(op, variables, var1);
@@ -333,7 +372,12 @@ public class Interpreter {
                     name.append(expression.charAt(i + 1));
                     i++;
                 }
-                operands.add(variables.get(name.toString()));
+
+                if (!localStack.isEmpty() && localStack.get(localStack.size() - 1).containsKey(name.toString())) {
+                    operands.add(localStack.get(localStack.size() - 1).get(name.toString()));
+                } else {
+                    operands.add(variables.get(name.toString()));
+                }
                 state = "num";
             } else if (Character.isLetter(cur)) {
                 StringBuilder name = new StringBuilder(String.valueOf(cur));
@@ -344,9 +388,12 @@ public class Interpreter {
                 String literal = name.toString();
                 if (binOps.contains(literal) || unaOps.contains(literal)) {
                     operators.add(literal);
+                } else if (variables.containsKey(literal)) { // Local or global function
+                    operators.add(literal);
                 } else {
-                    operands.add(name.toString());
+                    throw new Error ("Invalid Operands");
                 }
+                priority.put(literal, 3);
                 state = "num";
             }
         }
@@ -375,9 +422,23 @@ public class Interpreter {
                     res = Double.parseDouble(operands.remove(operands.size() - 2)) % Double.parseDouble(operands.remove(operands.size() - 1));
                     break;
                 case ":":
-                    res = Double.parseDouble(variables.get(operands.remove(operands.size() - 1)));
+                    if (!localStack.isEmpty()  && localStack.get(localStack.size() - 1).containsKey(operands.size() - 1)) {
+                        res = Double.parseDouble(localStack.get(localStack.size() - 1).get(operands.remove(operands.size() - 1)));
+                    } else {
+                        res = Double.parseDouble(variables.get(operands.remove(operands.size() - 1)));
+                    }
                     break;
                 default:
+                    if (variables.containsKey(Op)) {
+                        res = Double.parseDouble(callSubProgram(Op, operands));
+                        break;
+                    } else if (binOps.contains(Op)) {
+                        res = Double.parseDouble(eval(Op, operands.remove(operands.size() - 2), operands.remove(operands.size() - 1)));
+                        break;
+                    } else if (unaOps.contains(Op)) {
+                        res = Double.parseDouble(eval(Op, operands.remove(operands.size() - 1)));
+                        break;
+                    }
                     throw new Exception("Invalid Operator");
             }
             operands.add(Double.toString(res));

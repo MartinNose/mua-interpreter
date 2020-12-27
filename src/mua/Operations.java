@@ -3,9 +3,10 @@ package mua;
 import java.util.Map;
 
 import static mua.Interpreter.readline;
+import static mua.Interpreter.localStack;
 
 public class Operations {
-    static public String[] Operations1 = {"thing", "print", "not", "erase", "isname", "run", "isnumber", "isbool", "isword", "isempty", "islist"};
+    static public String[] Operations1 = {"thing", "print", "not", "erase", "isname", "run", "isnumber", "isbool", "isword", "isempty", "islist", "return", "export"};
     static public String[] Operations2 = {"make", "thing", "add", "sub", "mul", "div", "mod", "gt", "eq", "lt", "and", "or"};
     static public String[] Operations3 = {"if"};
 
@@ -67,6 +68,10 @@ public class Operations {
                 return not(var1);
             case "isbool" :
                 return isbool(var1);
+            case "return" :
+                return returnvalue(var1);
+            case "export" :
+                return export(variables, var1);
             default :
                 System.err.println("Invalid Operation");
                 return null;
@@ -75,17 +80,31 @@ public class Operations {
 
     public static String invoke(String operation, Map<String, String> variables, Map<String, String> localV) throws Exception {
         if (!variables.containsKey(operation)) throw new Exception("Function not found");
-        
+
         return "1";
     }
 
     static String make(Map<String, String> variables, String name, String value) {
-        variables.put(name, value);
-        return value;
+        if (localStack.isEmpty()) {
+            variables.put(name, value);
+            return value;
+        } else {
+            localStack.get(localStack.size() - 1).put(name, value);
+            return value;
+        }
+
+
     }
 
     static String thing(Map<String, String> variables, String name) {
         return variables.get(name);
+    }
+
+    static String export(Map<String, String> variables, String name) {
+        if (localStack.isEmpty()) return null;
+        String res = localStack.get(localStack.size() - 1).get(name);
+        variables.put(name, res);
+        return res;
     }
 
     static String print(String name) {
@@ -115,6 +134,7 @@ public class Operations {
         return  (name.matches("\\[.*\\]") || name.equals("")) ? "true" : "false";
     }
 
+
     static String run(String name) {
         String res = "";
         try {
@@ -129,6 +149,10 @@ public class Operations {
         boolean v = !stb(name);
         return (v) ? "true" : "false";
 
+    }
+
+    static String returnvalue(String var1) {
+        return var1;
     }
 
     static String add(String var1, String var2) {
@@ -157,6 +181,9 @@ public class Operations {
     }
 
     static String eq(String var1, String var2) {
+        if (isNumeric(var1) && isNumeric(var2)) {
+            return (Double.parseDouble(var1) == Double.parseDouble(var2)) ? "true" : "false";
+        }
         return (var1.equals(var2))? "true" : "false";
     }
 
@@ -211,5 +238,4 @@ public class Operations {
         v2 = stb(var2);
         return (v1 || v2) ? "true" : "false";
     }
-
 }
