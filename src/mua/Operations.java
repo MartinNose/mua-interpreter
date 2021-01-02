@@ -148,6 +148,10 @@ public class Operations {
     }
 
     static String print(String name) {
+        if (name.charAt(0) == '[') {
+            name = name.substring(1, name.length() - 1);
+            name = name.replaceAll("(^ )|( $)", "");
+        }
         System.out.println(name);
         return name;
     }
@@ -186,6 +190,10 @@ public class Operations {
 
     static ArrayList<String> getList(String list) {
         ArrayList<String> res = new ArrayList<>();
+        if (list.charAt(0) != '[') {
+            res.add(list);
+            return res;
+        }
         list = list.substring(1, list.length() - 1);
         int bCnt = 0;
         StringBuilder item = new StringBuilder();
@@ -374,7 +382,12 @@ public class Operations {
     }
 
     static String sentence(String var1, String var2) throws Exception {
-        return var1.substring(0, var1.length() - 1) + " " + var2.substring(1);
+        ArrayList<String> list1 = getList(var1);
+        ArrayList<String> list2 = getList(var2);
+        for (int i = 0; i < list2.size(); i++) {
+            list1.add(list2.get(i));
+        }
+        return listToString(list1);
     }
 
     static String list(String var1, String var2) throws Exception {
