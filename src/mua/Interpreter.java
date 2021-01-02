@@ -23,6 +23,14 @@ public class Interpreter {
         }
     }
 
+    enum State {
+        NORMAL,
+        LISBEG,
+        INFIXBEG,
+        RUN
+    }
+
+    static ArrayList<String> immOps;
     static ArrayList<String> unaOps;
     static ArrayList<String> binOps;
     static ArrayList<String> triOps;
@@ -37,8 +45,13 @@ public class Interpreter {
     static ArrayList<Map<String, String>> localStack;
     static boolean isReturning = false;
 
+    static void initialize() throws Exception {
+        eval("make", "pi", "3.14159");
+    }
+
     public static void mainLoop() throws Exception {
         scanner = new Scanner(System.in);
+        immOps = new ArrayList<>(Arrays.asList(Operations.Operations0));
         unaOps = new ArrayList<>(Arrays.asList(Operations.Operations1));
         binOps = new ArrayList<>(Arrays.asList(Operations.Operations2));
         triOps = new ArrayList<>(Arrays.asList(Operations.Operations3));
@@ -50,6 +63,8 @@ public class Interpreter {
         opStack = new ArrayList<>();
         valStack = new ArrayList<>();
         operandCnt = 0;
+
+        initialize();
 
         while (scanner.hasNext()) {
             String line = scanner.nextLine();
@@ -120,17 +135,9 @@ public class Interpreter {
                     return tmp;
                 };
                 pushVStack(tmp);
-
             }
         }
         return tmp;
-    }
-
-    enum State {
-        NORMAL,
-        LISBEG,
-        INFIXBEG,
-        RUN
     }
 
     static void pushVStack(String value) {
@@ -146,6 +153,10 @@ public class Interpreter {
         String res;
         if (op.equals("read")) {
             res = scanner.nextLine();
+        } else if (op.equals("readlist")) {
+            res = "[" + scanner.nextLine().replaceAll("(^ )|( $)", "") + "]";
+        } else if (immOps.contains(op)) {
+            res = Operations.invoke(op);
         } else if (unaOps.contains(op)) {
             res = eval(op, valStack.remove(valStack.size() - 1));
         } else if (binOps.contains(op)) {
@@ -205,11 +216,11 @@ public class Interpreter {
     static private final Pattern numeric = Pattern.compile("-?\\d+(\\.\\d+)?");
 
     public static boolean isOp(String name) {
-        return name.equals("read") || unaOps.contains(name) || binOps.contains(name) || triOps.contains(name);
+        return immOps.contains(name)|| unaOps.contains(name) || binOps.contains(name) || triOps.contains(name);
     }
 
     private static int getOperandReq(String op) throws Exception {
-        if (op.equals("read")) return 0;
+        if (immOps.contains(op)) return 0;
         else if (unaOps.contains(op)) return 1;
         else if (binOps.contains(op)) return 2;
         else if (triOps.contains(op)) return 3;
